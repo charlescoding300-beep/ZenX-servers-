@@ -1,0 +1,15 @@
+{
+  "name": "zenx-servers",
+  "version": "1.0.0",
+  "description": "ZΞN X production server management backend",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

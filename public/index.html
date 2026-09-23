@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>ZΞN X Server</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #05070a;
+            color: #e8eef5;
+            font-family: Arial, sans-serif;
+        }
+
+        header {
+            padding: 22px;
+            border-bottom: 1px solid #18212b;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        main {
+            max-width: 1100px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
+            gap: 15px;
+        }
+
+        .card {
+            background: #0b1016;
+            border: 1px solid #18212b;
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .value {
+            font-size: 25px;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+
+        button {
+            background: #111923;
+            color: white;
+            border: 1px solid #263342;
+            border-radius: 9px;
+            padding: 11px 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #172331;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 7px 0;
+            border-radius: 8px;
+            border: 1px solid #263342;
+            background: #080c11;
+            color: white;
+        }
+
+        pre {
+            background: #030507;
+            border: 1px solid #18212b;
+            padding: 15px;
+            border-radius: 10px;
+            overflow: auto;
+            max-height: 400px;
+            white-space: pre-wrap;
+        }
+
+        #login {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 20px;
+        }
+
+        #dashboard {
+            display: none;
+        }
+
+        .online {
+            color: #62ff91;
+        }
+
+        .offline {
+            color: #ff6262;
+        }
+    </style>
+</head>
+<body>
+
+<div id="login" class="card">
+    <h1>𓃦 ZΞN X Server</h1>
+    <p>Secure server management</p>
+
+    <input
+        id="key"
+        type="password"
+        placeholder="Panel key"
+    >
+
+    <button onclick="login()">
+        Connect
+    </button>
+
+    <p id="loginStatus"></p>
+</div>
+
+<div id="dashboard">
+
+<header>
+    <h1>𓃦 ZΞN X Server</h1>
+    <div id="serverState"></div>
+</header>
+
+<main>
+
+<div class="grid">
+
+    <div class="card">
+        <div>Bot</div>
+        <div id="botState" class="value">...</div>
+    </div>
+
+    <div class="card">
+        <div>RAM</div>
+        <div id="ram" class="value">...</div>
+    </div>
+
+    <div class="card">
+        <div>CPU</div>
+        <div id="cpu" class="value">...</div>
+    </div>
+
+    <div class="card">
+        <div>Disk</div>
+        <div id="disk" class="value">...</div>
+    </div>
+
+</div>
+
+<div class="card" style="margin-top:15px">
+    <h2>Server Control</h2>
+
+    <button onclick="action('/api/server/start')">
+        ▶ Start
+    </button>
+
+    <button onclick="action('/api/server/stop')">
+        ■ Stop
+    </button>
+
+    <button onclick="action('/api/server/restart')">
+        ↻ Restart
+    </button>
+
+    <button onclick="deploy()">
+        ⬇ Deploy from GitHub
+    </button>
+</div>
+
+<div class="card" style="margin-top:15px">
+    <h2>GitHub</h2>
+
+    <p id="repo">...</p>
+    <p id="branch">...</p>
+
+    <p>
+        Webhook:
+        <code id="webhook"></code>
+    </p>
+</div>
+
+<div class="card" style="margin-top:15px">
+    <h2>Bot Logs</h2>
+    <pre id="logs">Loading...</pre>
+</div>
+
+</main>
+</div>
+
+<script>
+let panelKey = localStorage.getItem('zenx_panel_key');
+
+async function request(url, options = {}) {
+    options.headers = {
+        ...(options.headers || {}),
+        'X-Panel-Key': panelKey
+    };
+
+    const response = await fetch(url, options);
+
+    if (response.status === 401) {
+        logout();
+        throw new Error('Unauthorized');
+    }
+
+    return response.json();
+}
+
+async function login() {
+    const key = document.getElementById('key').value;
+
+    const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ key })
+    });
+
+    if (!response.ok) {
+        document.getElementById('loginStatus').textContent =
+            'Invalid panel key';
+        return;
+    }
+
+    panelKey = key;
+
+    localStorage.setItem(
+        'zenx_panel_key',
+        key
+    );
+
+    showDashboard();
+}
+
+function logout() {
+    localStorage.removeItem('zenx_panel_key');
+    location.reload();
+}
+
+function showDashboard() {
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+
+    refresh();
+}
+
+async function action(url) {
+    try {
+        await request(url, {
+            method: 'POST'
+        });
+
+        await refresh();
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function deploy() {
+    if (!confirm('Deploy the configured GitHub repository?')) {
+        return;
+    }
+
+    try {
+        await action('/api/deploy');
+    } catch {}
+}
+
+function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+
+    const units = ['B','KB','MB','GB','TB'];
+    const index = Math.floor(
+        Math.log(bytes) / Math.log(1024)
+    );
+
+    return (
+        (bytes / Math.pow(1024,index))
+            .toFixed(2) +
+        ' ' +
+        units[index]
+    );
+}
+
+async function refresh() {
+    try {
+        const data = await request('/api/status');
+
+        document.getElementById('serverState').innerHTML =
+            '<span class="online">● Management server online</span>';
+
+        document.getElementById('botState').textContent =
+            data.bot.running
+                ? 'ONLINE'
+                : 'OFFLINE';
+
+        document.getElementById('botState').className =
+            'value ' +
+            (data.bot.running
+                ? 'online'
+                : 'offline');
+
+        document.getElementById('ram').textContent =
+            formatBytes(data.resources.memory.usedBytes) +
+            ' / ' +
+            formatBytes(data.resources.memory.limitBytes);
+
+        document.getElementById('cpu').textContent =
+            data.resources.cpu.cores +
+            ' cores';
+
+        document.getElementById('disk').textContent =
+            formatBytes(data.resources.disk.usedBytes) +
+            ' / ' +
+            formatBytes(data.resources.disk.totalBytes);
+
+        document.getElementById('repo').textContent =
+            data.config.repository || 'Not configured';
+
+        document.getElementById('branch').textContent =
+            'Branch: ' + data.config.branch;
+
+        document.getElementById('webhook').textContent =
+            location.origin +
+            '/webhooks/github';
+
+        const logData =
+            await request('/api/logs');
+
+        document.getElementById('logs').textContent =
+            logData.logs || 'No logs yet.';
+
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+if (panelKey) {
+    fetch('/api/auth', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            key: panelKey
+        })
+    }).then(response => {
+        if (response.ok) {
+            showDashboard();
+        } else {
+            logout();
+        }
+    });
+}
+
+setInterval(() => {
+    if (panelKey) {
+        refresh();
+    }
+}, 5000);
+</script>
+
+</body>
+</html>
