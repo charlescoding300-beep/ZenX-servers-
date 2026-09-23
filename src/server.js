@@ -816,7 +816,7 @@ app.get('/api/github', (req, res) => {
     });
 });
 
-app.get('*', (req, res) => {
+app.get('/*splat', (req, res) => {
     res.sendFile(
         path.join(ROOT, 'public', 'index.html')
     );
